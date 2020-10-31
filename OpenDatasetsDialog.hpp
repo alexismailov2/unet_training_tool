@@ -22,6 +22,7 @@ public:
 
 private slots:
     void openViewer();
+    void createDatasetLists();
     void openDatasetItem(int row, int, int, int);
 
 private:
@@ -31,6 +32,7 @@ private:
     QComboBox *labelsDirectoryComboBox;
     QLabel *framesCutLabel;
     QPushButton *openViewerButton;
+    QPushButton* createDatasetButton;
     QTableWidget *labelsTable;
     QTableWidget *classCountTable;
     std::vector<std::pair<std::string, std::string>> _dataset;

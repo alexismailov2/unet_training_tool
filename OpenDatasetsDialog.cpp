@@ -10,6 +10,7 @@
 namespace fs = std::filesystem;
 #else
 #include <experimental/filesystem>
+#include <fstream>
 namespace fs = std::experimental::filesystem;
 #endif
 
@@ -97,6 +98,9 @@ OpenDatasetsDialog::OpenDatasetsDialog(QWidget *parent)
    openViewerButton = new QPushButton(tr("&Open viewer"), this);
    connect(openViewerButton, &QAbstractButton::clicked, this, &OpenDatasetsDialog::openViewer);
 
+   createDatasetButton = new QPushButton(tr("&Create dataset lists"), this);
+   connect(createDatasetButton, &QAbstractButton::clicked, this, &OpenDatasetsDialog::createDatasetLists);
+
    imagesDirectoryComboBox = createComboBox(QDir::toNativeSeparators(QDir::currentPath()));
    connect(imagesDirectoryComboBox->lineEdit(), &QLineEdit::returnPressed, [this](){
      openViewerButton->animateClick();
@@ -108,7 +112,7 @@ OpenDatasetsDialog::OpenDatasetsDialog(QWidget *parent)
 
    framesCutLabel = new QLabel("", this);
 
-   labelsTable = new QTableWidget(0, 2);
+   labelsTable = new QTableWidget(0, 3);
    labelsTable->setSelectionBehavior(QAbstractItemView::SelectRows);
 
    QStringList labels;
@@ -132,9 +136,9 @@ OpenDatasetsDialog::OpenDatasetsDialog(QWidget *parent)
    _scrollArea->setVisible(false);
    _scrollArea->setVisible(true);
 
-   classCountTable = new QTableWidget(0, 2);
+   classCountTable = new QTableWidget(0, 3);
    QStringList classCountTableLabels;
-   classCountTableLabels << tr("Class color") << tr("Count");
+   classCountTableLabels << tr("Add") << tr("Class color") << tr("Count");
    classCountTable->setHorizontalHeaderLabels(classCountTableLabels);
    classCountTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
    classCountTable->verticalHeader()->hide();
@@ -151,6 +155,7 @@ OpenDatasetsDialog::OpenDatasetsDialog(QWidget *parent)
    mainLayout->addWidget(classCountTable, 3, 0, 1, 3);
    mainLayout->addWidget(framesCutLabel, 4, 0, 1, 3);
    mainLayout->addWidget(openViewerButton, 5, 2);
+   mainLayout->addWidget(createDatasetButton, 5, 1);
    mainLayout->addWidget(_scrollArea, 0, 4, 5, 1);
 
    connect(new QShortcut(QKeySequence::Quit, this), &QShortcut::activated, qApp, &QApplication::quit);
@@ -195,6 +200,9 @@ void OpenDatasetsDialog::openViewer()
      const QString toolTip = QDir::toNativeSeparators(filePathQ);
      const QString relativePath = QDir::toNativeSeparators(currentDir.relativeFilePath(filePathQ));
      const qint64 size = QFileInfo(filePathQ).size();
+     QTableWidgetItem* addedItem(new QTableWidgetItem(tr("Added")));
+     addedItem->setFlags(addedItem->flags() | Qt::ItemIsUserCheckable);
+     addedItem->setCheckState(Qt::Checked);
      QTableWidgetItem *fileNameItem = new QTableWidgetItem(relativePath);
      fileNameItem->setData(absoluteFileNameRole, QVariant(filePathQ));
      fileNameItem->setToolTip(toolTip);
@@ -206,8 +214,9 @@ void OpenDatasetsDialog::openViewer()
      sizeItem->setFlags(sizeItem->flags() ^ Qt::ItemIsEditable);
      int row = labelsTable->rowCount();
      labelsTable->insertRow(row);
-     labelsTable->setItem(row, 0, fileNameItem);
-     labelsTable->setItem(row, 1, sizeItem);
+     labelsTable->setItem(row, 0, addedItem);
+     labelsTable->setItem(row, 1, fileNameItem);
+     labelsTable->setItem(row, 2, sizeItem);
 
      progressDialog.setValue(currentLabel);
      progressDialog.setLabelText(tr("Processed label number %1 of %n...", nullptr, imageList.size()).arg(currentLabel++));
@@ -232,10 +241,16 @@ void OpenDatasetsDialog::openViewer()
      //countItem->setToolTip(toolTip);
      countItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
      countItem->setFlags(countItem->flags() ^ Qt::ItemIsEditable);
+
+     QTableWidgetItem* addedItem(new QTableWidgetItem(tr("Added")));
+     addedItem->setFlags(addedItem->flags() | Qt::ItemIsUserCheckable);
+     addedItem->setCheckState(Qt::Checked);
+
      int row = classCountTable->rowCount();
      classCountTable->insertRow(row);
-     classCountTable->setItem(row, 0, classColorItem);
-     classCountTable->setItem(row, 1, countItem);
+     classCountTable->setItem(row, 0, addedItem);
+     classCountTable->setItem(row, 1, classColorItem);
+     classCountTable->setItem(row, 2, countItem);
    }
 //   framesCutLabel->setText(tr("%n file(s) found (Double click on a file to open it)", nullptr, currentFrame));
 //   framesCutLabel->setWordWrap(true);
@@ -260,4 +275,31 @@ void OpenDatasetsDialog::openDatasetItem(int row, int, int, int)
   image = QImage((uchar*)frame.data, frame.cols, frame.rows, frame.step, QImage::Format_RGB888);
   _labelsViewLabel->setPixmap(QPixmap::fromImage(image));
   _labelsViewLabel->adjustSize();
+}
+
+void OpenDatasetsDialog::createDatasetLists()
+{
+   auto imgsList = std::ofstream("imgs.txt");
+   auto masksList = std::ofstream("masks.txt");
+   auto ignoredImgsList = std::ofstream("ignoredImgs.txt");
+   auto ignoredMasksList = std::ofstream("ignoredMasks.txt");
+   int rowCount = labelsTable->rowCount();
+   for (auto i = 0; i < rowCount; ++i)
+   {
+      QTableWidgetItem* pItem(labelsTable->item(i, 0));
+      if (pItem)
+      {
+         Qt::CheckState st = pItem->checkState();
+         if (st == Qt::CheckState::Checked)
+         {
+            imgsList << _dataset[i].first << std::endl;
+            masksList << _dataset[i].second << std::endl;
+         }
+         else
+         {
+            ignoredImgsList << _dataset[i].first << std::endl;
+            ignoredMasksList << _dataset[i].second << std::endl;
+         }
+      }
+   }
 }
