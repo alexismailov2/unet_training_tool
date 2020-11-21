@@ -78,6 +78,8 @@ void openFile(const QString &fileName)
 OpenDatasetsDialog::OpenDatasetsDialog(QWidget *parent)
    : QDialog(parent)
 {
+  std::map<std::string, uint32_t> countObj;
+  CountingLabeledObjects(countObj, "/Users/alexanderismailov/WOR/Upwork/deffects_viewer_qt/_/unet_training_tool/dataset2archive1/4_Data/Kolosov_10.2020_4083.json");
    setWindowTitle(tr("Open datasests dialog"));
    QPushButton *imagesDirectoryButton = new QPushButton(tr("&Browse..."), this);
    connect(imagesDirectoryButton, &QAbstractButton::clicked, [this](){
@@ -237,7 +239,12 @@ void OpenDatasetsDialog::openViewer()
      else if (fs::exists(labelsDirectoryPath + "/" + filename + ".json"))
      {
        _dataset.emplace_back(file.path().string(), labelsDirectoryPath + "/" + filename + ".json");
-       CountingLabeledObjects(allLabelsByName, _dataset.back().second);
+       if (!CountingLabeledObjects(allLabelsByName, _dataset.back().second))
+       {
+         QMessageBox msgBox;
+         msgBox.setText(QString::fromStdString(std::string("The file: ") + labelsDirectoryPath + "/" + filename + ".json" + "is wrong!"));
+         msgBox.exec();
+       }
      }
      auto filePathQ = QString::fromStdString(_dataset.back().first);
      const QString toolTip = QDir::toNativeSeparators(filePathQ);
@@ -347,7 +354,16 @@ void OpenDatasetsDialog::openDatasetItem(int row, int, int, int)
   cv::Mat frame = cv::imread(_dataset[row].first, cv::IMREAD_COLOR);
   auto extention = _dataset[row].second.substr(_dataset[row].second.find_last_of('.') + 1);
   cv::Mat labelsImage = (extention == "json") ? ConvertPolygonsToMask(_dataset[row].second, _classesToColorsMap) : cv::imread(_dataset[row].second);
-  cv::addWeighted(frame, 1.0, labelsImage, 0.5, 0.0, frame);
+  if (labelsImage.empty())
+  {
+    QMessageBox msgBox;
+    msgBox.setText(QString::fromStdString(std::string("Something wrong with annotation: ") + _dataset[row].second));
+    msgBox.exec();
+  }
+  else
+  {
+    cv::addWeighted(frame, 1.0, labelsImage, 0.5, 0.0, frame);
+  }
   image = QImage((uchar*)frame.data, frame.cols, frame.rows, frame.step, QImage::Format_BGR888);
   _labelsViewLabel->setPixmap(QPixmap::fromImage(image));
   _labelsViewLabel->adjustSize();
