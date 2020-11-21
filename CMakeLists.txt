@@ -28,38 +28,46 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(QT NAMES Qt6 Qt5 COMPONENTS Widgets LinguistTools REQUIRED)
 find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Widgets LinguistTools REQUIRED)
-find_package(OpenCV REQUIRED)
+
+if("${CUSTOM_OPENCV_BUILD_PATH}" STREQUAL "")
+    find_package(OpenCV REQUIRED)
+else()
+    find_package(OpenCV REQUIRED PATHS ${CUSTOM_OPENCV_BUILD_PATH} NO_DEFAULT_PATH)
+endif()
+
+add_subdirectory(third_party)
 
 set(TS_FILES UnetTrainingTool_ru_RU.ts)
 
 include_directories(
-        #third_party/???/include
-        ${OpenCV_INCLUDE_DIRS})
+    third_party/UNetDarknetTorch/include
+    ${OpenCV_INCLUDE_DIRS})
 
-if(ANDROID)
+if (ANDROID)
     add_library(${PROJECT_NAME} SHARED
-            main.cpp
-            OpenDatasetsDialog.cpp
-            OpenDatasetsDialog.hpp
-            #${TS_FILES}
-            )
-else()
+        main.cpp
+        OpenDatasetsDialog.cpp
+        OpenDatasetsDialog.hpp
+        #${TS_FILES}
+        )
+else ()
     add_executable(${PROJECT_NAME}
-            main.cpp
-            OpenDatasetsDialog.cpp
-            OpenDatasetsDialog.hpp
-            #${TS_FILES}
-            )
-endif()
+        main.cpp
+        OpenDatasetsDialog.cpp
+        OpenDatasetsDialog.hpp
+        #${TS_FILES}
+        )
+endif ()
 
 set(STD_FILESYSTEM)
 if (NOT APPLE)
     set(STD_FILESYSTEM stdc++fs)
-endif()
+endif ()
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
-        Qt${QT_VERSION_MAJOR}::Widgets
-        ${OpenCV_LIBS}
-        ${STD_FILESYSTEM})
+    Qt${QT_VERSION_MAJOR}::Widgets
+    ${OpenCV_LIBS}
+    ${STD_FILESYSTEM}
+    train_unet_darknet2dl)
 
 #qt5_create_translation(QM_FILES ${CMAKE_SOURCE_DIR} ${TS_FILES})

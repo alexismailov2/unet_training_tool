@@ -4,6 +4,8 @@
 #include <QDialog>
 #include <QDir>
 
+#include <opencv2/core/types.hpp>
+
 QT_BEGIN_NAMESPACE
 class QComboBox;
 class QLabel;
@@ -26,7 +28,8 @@ private slots:
     void openDatasetItem(int row, int, int, int);
 
 private:
-    QComboBox *createComboBox(const QString &text = QString());
+    QComboBox* createComboBox(const QString &text = QString());
+    void updateColorMaps();
 
     QComboBox *imagesDirectoryComboBox;
     QComboBox *labelsDirectoryComboBox;
@@ -41,6 +44,8 @@ private:
     QLabel* _labelsViewLabel;
     QScrollArea* _scrollArea;
     QImage image;
+
+    std::map<std::string, cv::Scalar> _classesToColorsMap;
 };
 
 #endif //UNETTRAININGTOOL_OPENDATASETSDIALOG_HPP
