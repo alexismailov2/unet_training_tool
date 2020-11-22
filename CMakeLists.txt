@@ -28,6 +28,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(QT NAMES Qt6 Qt5 COMPONENTS Widgets LinguistTools REQUIRED)
 find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Widgets LinguistTools REQUIRED)
+find_package(Boost REQUIRED)
 
 if("${CUSTOM_OPENCV_BUILD_PATH}" STREQUAL "")
     find_package(OpenCV REQUIRED)
@@ -41,11 +42,16 @@ set(TS_FILES UnetTrainingTool_ru_RU.ts)
 
 include_directories(
     third_party/UNetDarknetTorch/include
-    ${OpenCV_INCLUDE_DIRS})
+    ${OpenCV_INCLUDE_DIRS}
+    ${Boost_INCLUDE_DIRS})
 
 if (ANDROID)
     add_library(${PROJECT_NAME} SHARED
         main.cpp
+        MainWindow.hpp
+        MainWindow.cpp
+        NewTrainingProjectDialog.hpp
+        NewTrainingProjectDialog.cpp
         OpenDatasetsDialog.cpp
         OpenDatasetsDialog.hpp
         #${TS_FILES}
@@ -53,6 +59,10 @@ if (ANDROID)
 else ()
     add_executable(${PROJECT_NAME}
         main.cpp
+        MainWindow.hpp
+        MainWindow.cpp
+        NewTrainingProjectDialog.hpp
+        NewTrainingProjectDialog.cpp
         OpenDatasetsDialog.cpp
         OpenDatasetsDialog.hpp
         #${TS_FILES}
@@ -67,6 +77,7 @@ endif ()
 target_link_libraries(${PROJECT_NAME} PRIVATE
     Qt${QT_VERSION_MAJOR}::Widgets
     ${OpenCV_LIBS}
+    ${Boost_LIBS}
     ${STD_FILESYSTEM}
     train_unet_darknet2dl)
 

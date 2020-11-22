@@ -1,10 +1,10 @@
-#ifndef UNETTRAININGTOOL_OPENDATASETSDIALOG_HPP
-#define UNETTRAININGTOOL_OPENDATASETSDIALOG_HPP
+#pragma once
 
 #include <QDialog>
 #include <QDir>
 
 #include <opencv2/core/types.hpp>
+#include <boost/property_tree/ptree.hpp>
 
 QT_BEGIN_NAMESPACE
 class QComboBox;
@@ -20,32 +20,37 @@ class OpenDatasetsDialog : public QDialog
 Q_OBJECT
 
 public:
-    OpenDatasetsDialog(QWidget *parent = nullptr);
+    OpenDatasetsDialog(std::string const& projectFile, QWidget *parent = nullptr);
 
 private slots:
-    void openViewer();
     void createDatasetLists();
     void openDatasetItem(int row, int, int, int);
 
 private:
-    QComboBox* createComboBox(const QString &text = QString());
+    auto createComboBox(const QString &text = QString()) -> QComboBox*;
     void updateColorMaps();
+    void openViewer(std::string const& projectFile);
+    void openCurrentDataset(std::string const& imagesDirectoryPath,
+                            std::string const& labelsDirectoryPath,
+                            std::map<cv::Vec3b, std::vector<cv::Rect>>& allLabels,
+                            std::map<std::string, uint32_t>& allLabelsByName,
+                            std::set<cv::Vec3b>& colorSet);
 
-    QComboBox *imagesDirectoryComboBox;
-    QComboBox *labelsDirectoryComboBox;
-    QLabel *framesCutLabel;
-    QPushButton *openViewerButton;
-    QPushButton* createDatasetButton;
-    QTableWidget *labelsTable;
-    QTableWidget *classCountTable;
+    QComboBox* imagesDirectoryComboBox{};
+    QComboBox* labelsDirectoryComboBox{};
+    QLabel* framesCutLabel{};
+    QPushButton *openViewerButton{};
+    QPushButton* createDatasetButton{};
+    QTableWidget* labelsTable{};
+    QTableWidget* classCountTable{};
     std::vector<std::pair<std::string, std::string>> _dataset;
     QDir currentDir;
 
-    QLabel* _labelsViewLabel;
-    QScrollArea* _scrollArea;
+    QLabel* _labelsViewLabel{};
+    QScrollArea* _scrollArea{};
     QImage image;
 
     std::map<std::string, cv::Scalar> _classesToColorsMap;
-};
 
-#endif //UNETTRAININGTOOL_OPENDATASETSDIALOG_HPP
+    boost::property_tree::ptree _pt;
+};

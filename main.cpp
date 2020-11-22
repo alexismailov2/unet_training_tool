@@ -1,11 +1,11 @@
 #include <QApplication>
-#include <QtCore/QTranslator>
-#include <OpenDatasetsDialog.hpp>
+
+#include "MainWindow.hpp"
 
 int main(int argc, char *argv[])
 {
   QApplication a(argc, argv);
-  OpenDatasetsDialog d;
-  d.exec();
+  MainWindow w;
+  w.show();
   return a.exec();
 }
