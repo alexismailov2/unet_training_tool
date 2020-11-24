@@ -24,6 +24,7 @@ private:
   QMenu* fileMenu{};
   QMenu* helpMenu{};
   QAction* newSessionAct{};
+  QAction* openSessionAct{};
   QAction* exitAct{};
   QAction* aboutAct{};
   QAction* aboutQtAct{};

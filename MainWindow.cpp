@@ -21,7 +21,21 @@ void MainWindow::createActions()
   newSessionAct->setShortcuts(QKeySequence::New);
   newSessionAct->setStatusTip(tr("Create a new training project"));
   connect(newSessionAct, &QAction::triggered, [this](){
-    NewTrainingProjectDialog newTrainingProjectDialog(this);
+    NewTrainingProjectDialog newTrainingProjectDialog(false, this);
+    newTrainingProjectDialog.show();
+    if (newTrainingProjectDialog.exec() == QDialog::Accepted)
+    {
+      OpenDatasetsDialog openDatasetsDialog(newTrainingProjectDialog._projectFileName.toStdString(), this);
+      openDatasetsDialog.show();
+      openDatasetsDialog.exec();
+    }
+  });
+
+  openSessionAct = new QAction(tr("&Open training project..."), this);
+  openSessionAct->setShortcuts(QKeySequence::New);
+  openSessionAct->setStatusTip(tr("Open a new training project"));
+  connect(openSessionAct, &QAction::triggered, [this](){
+    NewTrainingProjectDialog newTrainingProjectDialog(true, this);
     newTrainingProjectDialog.show();
     if (newTrainingProjectDialog.exec() == QDialog::Accepted)
     {
@@ -51,6 +65,7 @@ void MainWindow::createMenus()
 {
   fileMenu = menuBar()->addMenu(tr("&File"));
   fileMenu->addAction(newSessionAct);
+  fileMenu->addAction(openSessionAct);
   fileMenu->addSeparator();
   fileMenu->addAction(exitAct);
 

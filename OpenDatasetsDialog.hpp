@@ -36,10 +36,10 @@ private:
                             std::map<std::string, uint32_t>& allLabelsByName,
                             std::set<cv::Vec3b>& colorSet);
 
-    QComboBox* imagesDirectoryComboBox{};
-    QComboBox* labelsDirectoryComboBox{};
-    QLabel* framesCutLabel{};
-    QPushButton *openViewerButton{};
+    //QComboBox* imagesDirectoryComboBox{};
+    //QComboBox* labelsDirectoryComboBox{};
+    //QLabel* framesCutLabel{};
+    //QPushButton *openViewerButton{};
     QPushButton* createDatasetButton{};
     QTableWidget* labelsTable{};
     QTableWidget* classCountTable{};
@@ -52,5 +52,8 @@ private:
 
     std::map<std::string, cv::Scalar> _classesToColorsMap;
 
+    std::string _projectFile;
     boost::property_tree::ptree _pt;
+
+    QPushButton* _startTrainingButton{};
 };

@@ -54,6 +54,8 @@ if (ANDROID)
         NewTrainingProjectDialog.cpp
         OpenDatasetsDialog.cpp
         OpenDatasetsDialog.hpp
+        StartTrainingDialog.hpp
+        StartTrainingDialog.cpp
         #${TS_FILES}
         )
 else ()
@@ -65,6 +67,8 @@ else ()
         NewTrainingProjectDialog.cpp
         OpenDatasetsDialog.cpp
         OpenDatasetsDialog.hpp
+        StartTrainingDialog.hpp
+        StartTrainingDialog.cpp
         #${TS_FILES}
         )
 endif ()

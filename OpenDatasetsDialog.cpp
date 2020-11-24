@@ -1,4 +1,5 @@
 #include "OpenDatasetsDialog.hpp"
+#include "StartTrainingDialog.hpp"
 
 #include <opencv2/opencv.hpp>
 
@@ -96,6 +97,39 @@ void iterateOverDatasets(bp::ptree& pt, std::function<void(std::string const&, s
     }
   }
 }
+
+void saveColors(bp::ptree& tree, std::map<std::string, cv::Scalar> const& colorMap)
+{
+  tree.put_child("classesColorsMap", bp::ptree{});
+  auto datasets = tree.get_child_optional("classesColorsMap");
+  for (auto const& item : colorMap)
+  {
+    bp::ptree classColorItem;
+    classColorItem.put("className", item.first);
+    classColorItem.put("blue", item.second[0]);
+    classColorItem.put("green", item.second[1]);
+    classColorItem.put("red", item.second[2]);
+    datasets.get().push_back(bp::ptree::value_type("", classColorItem));
+  }
+}
+
+auto loadColors(bp::ptree& tree) -> std::map<std::string, cv::Scalar>
+{
+  std::map<std::string, cv::Scalar> classesColors;
+  auto datasets = tree.get_child_optional("classesColorsMap");
+  if (datasets.has_value())
+  {
+    for (auto const& item : datasets.get())
+    {
+      classesColors[item.second.get<std::string>("className")] = cv::Scalar(
+        item.second.get<uint8_t>("blue"),
+        item.second.get<uint8_t>("green"),
+        item.second.get<uint8_t>("red")
+      );
+    }
+  }
+  return classesColors;
+}
 } /// end namespace anonymous
 
 OpenDatasetsDialog::OpenDatasetsDialog(std::string const& projectFile, QWidget* parent)
@@ -103,19 +137,21 @@ OpenDatasetsDialog::OpenDatasetsDialog(std::string const& projectFile, QWidget* 
 {
    setWindowTitle(tr("Open datasets dialog"));
 
+   _projectFile = projectFile;
+
    createDatasetButton = new QPushButton(tr("&Create dataset lists"), this);
    connect(createDatasetButton, &QAbstractButton::clicked, this, &OpenDatasetsDialog::createDatasetLists);
 
-   imagesDirectoryComboBox = createComboBox(QDir::toNativeSeparators(QDir::currentPath()));
-   connect(imagesDirectoryComboBox->lineEdit(), &QLineEdit::returnPressed, [this](){
-     openViewerButton->animateClick();
-   });
-   labelsDirectoryComboBox = createComboBox(QDir::toNativeSeparators(QDir::currentPath()));
-   connect(labelsDirectoryComboBox->lineEdit(), &QLineEdit::returnPressed, [this](){
-     openViewerButton->animateClick();
-   });
+//   imagesDirectoryComboBox = createComboBox(QDir::toNativeSeparators(QDir::currentPath()));
+//   connect(imagesDirectoryComboBox->lineEdit(), &QLineEdit::returnPressed, [this](){
+//     openViewerButton->animateClick();
+//   });
+//   labelsDirectoryComboBox = createComboBox(QDir::toNativeSeparators(QDir::currentPath()));
+//   connect(labelsDirectoryComboBox->lineEdit(), &QLineEdit::returnPressed, [this](){
+//     openViewerButton->animateClick();
+//   });
 
-   framesCutLabel = new QLabel("", this);
+ //  framesCutLabel = new QLabel("", this);
 
    labelsTable = new QTableWidget(0, 3);
    labelsTable->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -170,18 +206,29 @@ OpenDatasetsDialog::OpenDatasetsDialog(std::string const& projectFile, QWidget* 
          break;
      }
    });
-   QGridLayout *mainLayout = new QGridLayout(this);
+
+   _startTrainingButton = new QPushButton(tr("&Start training..."), this);
+   connect(_startTrainingButton, &QAbstractButton::clicked, [this](){
+     auto startTrainignDialog = new StartTrainingDialog(_projectFile, this);
+     startTrainignDialog->exec();
+   });
+
+   QGridLayout* mainLayout = new QGridLayout(this);
    mainLayout->addWidget(labelsTable, 0, 0, 1, 3);
    mainLayout->addWidget(classCountTable, 1, 0, 1, 3);
-   mainLayout->addWidget(framesCutLabel, 2, 0, 1, 3);
-   mainLayout->addWidget(openViewerButton, 3, 2);
-   mainLayout->addWidget(createDatasetButton, 3, 1);
-   mainLayout->addWidget(_scrollArea, 0, 4, 4, 1);
+   //mainLayout->addWidget(framesCutLabel, 2, 0, 1, 3);
+   //mainLayout->addWidget(openViewerButton, 3, 2);
+   mainLayout->addWidget(createDatasetButton, 2, 1);
+   mainLayout->addWidget(_startTrainingButton, 3, 1);
+   mainLayout->addWidget(_scrollArea, 0, 4, 3, 1);
 
    connect(new QShortcut(QKeySequence::Quit, this), &QShortcut::activated, qApp, &QApplication::quit);
 
    resize(QGuiApplication::primaryScreen()->availableSize() * 3 / 5);
    openViewer(projectFile);
+   boost::property_tree::read_json(_projectFile, _pt);
+   _classesToColorsMap = loadColors(_pt);
+   updateColorMaps();
 }
 
 void OpenDatasetsDialog::updateColorMaps()
@@ -193,6 +240,8 @@ void OpenDatasetsDialog::updateColorMaps()
     auto color = classCountTable->item(i, 1)->backgroundColor();
     _classesToColorsMap[className] = cv::Scalar(color.blue(), color.green(), color.red());
   }
+  saveColors(_pt, _classesToColorsMap);
+  bp::write_json(_projectFile, _pt);
   if ((labelsTable->currentRow() >= 0) && (labelsTable->currentRow() < labelsTable->rowCount()))
   {
     openDatasetItem(labelsTable->currentRow(), 0, 0, 0);
@@ -297,6 +346,7 @@ void OpenDatasetsDialog::openCurrentDataset(std::string const& imagesDirectoryPa
      else if (fs::exists(labelsDirectoryPath + "/" + filename + ".json"))
      {
        _dataset.emplace_back(file.path().string(), labelsDirectoryPath + "/" + filename + ".json");
+       LabelMeDeleteImage(_dataset.back().second);
        if (!CountingLabeledObjects(allLabelsByName, _dataset.back().second))
        {
          QMessageBox msgBox;

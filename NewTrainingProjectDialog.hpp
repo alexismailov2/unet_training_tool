@@ -17,7 +17,7 @@ class NewTrainingProjectDialog : public QDialog
   Q_OBJECT
 
 public:
-  NewTrainingProjectDialog(QWidget *parent = nullptr);
+  NewTrainingProjectDialog(bool isOpen, QWidget *parent = nullptr);
 
 private:
   QPushButton* _addDatasetButton{};
