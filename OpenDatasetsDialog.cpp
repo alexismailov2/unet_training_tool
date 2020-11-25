@@ -1,5 +1,6 @@
 #include "OpenDatasetsDialog.hpp"
 #include "StartTrainingDialog.hpp"
+#include "ProjectFile.hpp"
 
 #include <opencv2/opencv.hpp>
 
@@ -80,56 +81,6 @@ void openFile(const QString &fileName)
 {
   QDesktopServices::openUrl(QUrl::fromLocalFile(fileName));
 }
-
-void iterateOverDatasets(bp::ptree& pt, std::function<void(std::string const&, std::string const&)>&& cb)
-{
-  auto datasets = pt.get_child_optional("datasets");
-  if (datasets.has_value())
-  {
-    for (auto const& item : datasets.get())
-    {
-      auto images = item.second.get_optional<std::string>("images");
-      auto annotations = item.second.get_optional<std::string>("annotations");
-      if (images.has_value() && annotations.has_value())
-      {
-        cb(images.get(), annotations.get());
-      }
-    }
-  }
-}
-
-void saveColors(bp::ptree& tree, std::map<std::string, cv::Scalar> const& colorMap)
-{
-  tree.put_child("classesColorsMap", bp::ptree{});
-  auto datasets = tree.get_child_optional("classesColorsMap");
-  for (auto const& item : colorMap)
-  {
-    bp::ptree classColorItem;
-    classColorItem.put("className", item.first);
-    classColorItem.put("blue", item.second[0]);
-    classColorItem.put("green", item.second[1]);
-    classColorItem.put("red", item.second[2]);
-    datasets.get().push_back(bp::ptree::value_type("", classColorItem));
-  }
-}
-
-auto loadColors(bp::ptree& tree) -> std::map<std::string, cv::Scalar>
-{
-  std::map<std::string, cv::Scalar> classesColors;
-  auto datasets = tree.get_child_optional("classesColorsMap");
-  if (datasets.has_value())
-  {
-    for (auto const& item : datasets.get())
-    {
-      classesColors[item.second.get<std::string>("className")] = cv::Scalar(
-        item.second.get<uint8_t>("blue"),
-        item.second.get<uint8_t>("green"),
-        item.second.get<uint8_t>("red")
-      );
-    }
-  }
-  return classesColors;
-}
 } /// end namespace anonymous
 
 OpenDatasetsDialog::OpenDatasetsDialog(std::string const& projectFile, QWidget* parent)
@@ -138,20 +89,6 @@ OpenDatasetsDialog::OpenDatasetsDialog(std::string const& projectFile, QWidget* 
    setWindowTitle(tr("Open datasets dialog"));
 
    _projectFile = projectFile;
-
-   createDatasetButton = new QPushButton(tr("&Create dataset lists"), this);
-   connect(createDatasetButton, &QAbstractButton::clicked, this, &OpenDatasetsDialog::createDatasetLists);
-
-//   imagesDirectoryComboBox = createComboBox(QDir::toNativeSeparators(QDir::currentPath()));
-//   connect(imagesDirectoryComboBox->lineEdit(), &QLineEdit::returnPressed, [this](){
-//     openViewerButton->animateClick();
-//   });
-//   labelsDirectoryComboBox = createComboBox(QDir::toNativeSeparators(QDir::currentPath()));
-//   connect(labelsDirectoryComboBox->lineEdit(), &QLineEdit::returnPressed, [this](){
-//     openViewerButton->animateClick();
-//   });
-
- //  framesCutLabel = new QLabel("", this);
 
    labelsTable = new QTableWidget(0, 3);
    labelsTable->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -209,26 +146,28 @@ OpenDatasetsDialog::OpenDatasetsDialog(std::string const& projectFile, QWidget* 
 
    _startTrainingButton = new QPushButton(tr("&Start training..."), this);
    connect(_startTrainingButton, &QAbstractButton::clicked, [this](){
-     auto startTrainignDialog = new StartTrainingDialog(_projectFile, this);
-     startTrainignDialog->exec();
+     auto startTrainingDialog = new StartTrainingDialog(_projectFile, this);
+     startTrainingDialog->exec();
    });
 
-   QGridLayout* mainLayout = new QGridLayout(this);
-   mainLayout->addWidget(labelsTable, 0, 0, 1, 3);
-   mainLayout->addWidget(classCountTable, 1, 0, 1, 3);
-   //mainLayout->addWidget(framesCutLabel, 2, 0, 1, 3);
-   //mainLayout->addWidget(openViewerButton, 3, 2);
-   mainLayout->addWidget(createDatasetButton, 2, 1);
-   mainLayout->addWidget(_startTrainingButton, 3, 1);
-   mainLayout->addWidget(_scrollArea, 0, 4, 3, 1);
+   auto mainLayout = new QGridLayout(this);
+   mainLayout->addWidget(labelsTable, 0, 0);
+   mainLayout->addWidget(classCountTable, 1, 0);
+   mainLayout->addWidget(_startTrainingButton, 2, 0);
+   mainLayout->addWidget(_scrollArea, 0, 1, 3, 1);
 
    connect(new QShortcut(QKeySequence::Quit, this), &QShortcut::activated, qApp, &QApplication::quit);
 
    resize(QGuiApplication::primaryScreen()->availableSize() * 3 / 5);
    openViewer(projectFile);
    boost::property_tree::read_json(_projectFile, _pt);
-   _classesToColorsMap = loadColors(_pt);
-   updateColorMaps();
+   _classesToColorsMap = ProjectFile::loadColors(_pt);
+   for (int i = 0; i < classCountTable->rowCount(); ++i)
+   {
+     cv::Scalar color = _classesToColorsMap[classCountTable->item(i, 2)->text().toStdString()];
+     classCountTable->item(i, 1)->setBackground(QColor(color[2], color[1], color[0]));
+   }
+   //updateColorMaps();
 }
 
 void OpenDatasetsDialog::updateColorMaps()
@@ -240,7 +179,7 @@ void OpenDatasetsDialog::updateColorMaps()
     auto color = classCountTable->item(i, 1)->backgroundColor();
     _classesToColorsMap[className] = cv::Scalar(color.blue(), color.green(), color.red());
   }
-  saveColors(_pt, _classesToColorsMap);
+  ProjectFile::saveColors(_pt, _classesToColorsMap);
   bp::write_json(_projectFile, _pt);
   if ((labelsTable->currentRow() >= 0) && (labelsTable->currentRow() < labelsTable->rowCount()))
   {
@@ -258,27 +197,27 @@ void OpenDatasetsDialog::openViewer(std::string const& projectFile)
   std::set<cv::Vec3b> colorSet;
 
   bp::read_json(projectFile, _pt);
-  iterateOverDatasets(_pt, [&](std::string const& imagesDirercoryPath, std::string const& labelsDirectoryPath) {
+  ProjectFile::iterateOverDatasets(_pt, [&](std::string const& imagesDirercoryPath, std::string const& labelsDirectoryPath) {
     openCurrentDataset(imagesDirercoryPath, labelsDirectoryPath, allLabels, allLabelsByName, colorSet);
   });
 
   for (auto const& classLabels : allLabels)
   {
-    QTableWidgetItem* classNameItem = new QTableWidgetItem(QString::fromStdString(std::to_string(classLabels.first[0]) + " " +
+    auto classNameItem = new QTableWidgetItem(QString::fromStdString(std::to_string(classLabels.first[0]) + " " +
                                                                                   std::to_string(classLabels.first[1]) + " " +
                                                                                   std::to_string(classLabels.first[2])));
     classNameItem->setFlags(classNameItem->flags() ^ Qt::ItemIsEditable);
     classNameItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
 
-    QTableWidgetItem* countItem = new QTableWidgetItem(QString::fromStdString(std::to_string(classLabels.second.size())));
+    auto countItem = new QTableWidgetItem(QString::fromStdString(std::to_string(classLabels.second.size())));
     countItem->setFlags(countItem->flags() ^ Qt::ItemIsEditable);
     countItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
 
-    QTableWidgetItem* addedItem = new QTableWidgetItem(tr("Added"));
+    auto addedItem = new QTableWidgetItem(tr("Added"));
     addedItem->setFlags(addedItem->flags() | Qt::ItemIsUserCheckable);
     addedItem->setCheckState(Qt::Checked);
 
-    QTableWidgetItem* classColorItem = new QTableWidgetItem(tr(""));
+    auto classColorItem = new QTableWidgetItem(tr(""));
     classColorItem->setBackground(QColor(classLabels.first[0], classLabels.first[1], classLabels.first[2]));
 
     int row = classCountTable->rowCount();
@@ -291,19 +230,19 @@ void OpenDatasetsDialog::openViewer(std::string const& projectFile)
 
   for (auto const& classLabels : allLabelsByName)
   {
-    QTableWidgetItem* classNameItem = new QTableWidgetItem(QString::fromStdString(classLabels.first));
+    auto classNameItem = new QTableWidgetItem(QString::fromStdString(classLabels.first));
     classNameItem->setFlags(classNameItem->flags() ^ Qt::ItemIsEditable);
     classNameItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
 
-    QTableWidgetItem* countItem = new QTableWidgetItem(QString::fromStdString(std::to_string(classLabels.second)));
+    auto countItem = new QTableWidgetItem(QString::fromStdString(std::to_string(classLabels.second)));
     countItem->setFlags(countItem->flags() ^ Qt::ItemIsEditable);
     countItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
 
-    QTableWidgetItem* addedItem = new QTableWidgetItem(tr("Added"));
+    auto addedItem = new QTableWidgetItem(tr("Added"));
     addedItem->setFlags(addedItem->flags() | Qt::ItemIsUserCheckable);
     addedItem->setCheckState(Qt::Checked);
 
-    QTableWidgetItem* classColorItem = new QTableWidgetItem(tr(""));
+    auto classColorItem = new QTableWidgetItem(tr(""));
     classColorItem->setBackground(QColor(QColor::colorNames().first()));
 
     int row = classCountTable->rowCount();
@@ -313,7 +252,7 @@ void OpenDatasetsDialog::openViewer(std::string const& projectFile)
     classCountTable->setItem(row, 2, classNameItem);
     classCountTable->setItem(row, 3, countItem);
   }
-  updateColorMaps();
+  //updateColorMaps();
 }
 
 void OpenDatasetsDialog::openCurrentDataset(std::string const& imagesDirectoryPath,
@@ -358,14 +297,14 @@ void OpenDatasetsDialog::openCurrentDataset(std::string const& imagesDirectoryPa
      const QString toolTip = QDir::toNativeSeparators(filePathQ);
      const QString relativePath = QDir::toNativeSeparators(currentDir.relativeFilePath(filePathQ));
      const qint64 size = QFileInfo(filePathQ).size();
-     QTableWidgetItem* addedItem(new QTableWidgetItem(tr("Added")));
+     auto addedItem = new QTableWidgetItem(tr("Added"));
      addedItem->setFlags(addedItem->flags() | Qt::ItemIsUserCheckable);
      addedItem->setCheckState(Qt::Checked);
-     QTableWidgetItem *fileNameItem = new QTableWidgetItem(relativePath);
+     auto fileNameItem = new QTableWidgetItem(relativePath);
      fileNameItem->setData(absoluteFileNameRole, QVariant(filePathQ));
      fileNameItem->setToolTip(toolTip);
      fileNameItem->setFlags(fileNameItem->flags() ^ Qt::ItemIsEditable);
-     QTableWidgetItem *sizeItem = new QTableWidgetItem(QString::fromStdString(std::to_string(size)));
+     auto sizeItem = new QTableWidgetItem(QString::fromStdString(std::to_string(size)));
      sizeItem->setData(absoluteFileNameRole, QVariant(filePathQ));
      sizeItem->setToolTip(toolTip);
      sizeItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
@@ -385,15 +324,6 @@ void OpenDatasetsDialog::openCurrentDataset(std::string const& imagesDirectoryPa
        break;
      }
    }
-}
-
-auto OpenDatasetsDialog::createComboBox(const QString &text) -> QComboBox*
-{
-   QComboBox *comboBox = new QComboBox;
-   comboBox->setEditable(true);
-   comboBox->addItem(text);
-   comboBox->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-   return comboBox;
 }
 
 void OpenDatasetsDialog::openDatasetItem(int row, int, int, int)

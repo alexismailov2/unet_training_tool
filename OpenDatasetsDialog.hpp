@@ -27,23 +27,18 @@ private slots:
     void openDatasetItem(int row, int, int, int);
 
 private:
-    auto createComboBox(const QString &text = QString()) -> QComboBox*;
     void updateColorMaps();
     void openViewer(std::string const& projectFile);
+    // TODO: dirty function should be rewritten more clear
     void openCurrentDataset(std::string const& imagesDirectoryPath,
                             std::string const& labelsDirectoryPath,
                             std::map<cv::Vec3b, std::vector<cv::Rect>>& allLabels,
                             std::map<std::string, uint32_t>& allLabelsByName,
                             std::set<cv::Vec3b>& colorSet);
 
-    //QComboBox* imagesDirectoryComboBox{};
-    //QComboBox* labelsDirectoryComboBox{};
-    //QLabel* framesCutLabel{};
-    //QPushButton *openViewerButton{};
-    QPushButton* createDatasetButton{};
+    //QPushButton* _createDatasetButton{};
     QTableWidget* labelsTable{};
     QTableWidget* classCountTable{};
-    std::vector<std::pair<std::string, std::string>> _dataset;
     QDir currentDir;
 
     QLabel* _labelsViewLabel{};
@@ -51,6 +46,7 @@ private:
     QImage image;
 
     std::map<std::string, cv::Scalar> _classesToColorsMap;
+    std::vector<std::pair<std::string, std::string>> _dataset;
 
     std::string _projectFile;
     boost::property_tree::ptree _pt;

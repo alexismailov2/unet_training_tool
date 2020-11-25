@@ -22,6 +22,9 @@ Q_OBJECT
 public:
   StartTrainingDialog(std::string const& projectFileName, QWidget *parent = nullptr);
 
+private:
+  void trainingProcess();
+
 public:
   std::string _projectFileName;
   boost::property_tree::ptree _pt;
