@@ -24,7 +24,7 @@ bool appendNewDataset(bp::ptree& tree, std::string const& images, std::string co
   datasetItem.put("annotations", annotations);
 
   auto datasets = tree.get_child_optional("datasets");
-  if (!datasets.has_value())
+  if (!datasets.is_initialized())
   {
     datasets = tree.put_child("datasets", bp::ptree{});
   }
@@ -43,7 +43,7 @@ bool appendNewDataset(bp::ptree& tree, std::string const& images, std::string co
 void removeSelectedDataset(bp::ptree& tree, std::string const& annotationForDeletion)
 {
   auto datasets = tree.get_child_optional("datasets");
-  if (datasets.has_value())
+  if (datasets.is_initialized())
   {
     auto result = std::find_if(datasets.get().begin(), datasets.get().end(), [&](bp::ptree::value_type const& element) {
       auto const currentAnnotation = element.second.get<std::string>("annotations");
@@ -89,7 +89,7 @@ NewTrainingProjectDialog::NewTrainingProjectDialog(bool isOpen, QWidget *parent)
 
   _datasetListWidget = new QListWidget(this);
   auto datasets = _pt.get_child_optional("datasets");
-  if (datasets.has_value())
+  if (datasets.is_initialized())
   {
     for (auto& item : datasets.get())
     {
@@ -119,7 +119,7 @@ NewTrainingProjectDialog::NewTrainingProjectDialog(bool isOpen, QWidget *parent)
           bp::ptree annotation;
           bp::read_json(fullPath, annotation);
           auto imagePathOpt = annotation.get_optional<std::string>("imagePath");
-          if (imagePathOpt.has_value())
+          if (imagePathOpt.is_initialized())
           {
             auto imageDirPath = imagePathOpt.get().substr(0, imagePathOpt.get().find_last_of('\\'));
             std::replace(imageDirPath.begin(), imageDirPath.end(), '\\', '/');

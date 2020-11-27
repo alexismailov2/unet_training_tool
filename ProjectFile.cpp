@@ -1,10 +1,15 @@
 #include "ProjectFile.hpp"
 
+#include <boost/property_tree/ptree.hpp>
+#include <optional>
+#include <map>
+#include <string>
+
 auto ProjectFile::loadColors(boost::property_tree::ptree& tree) -> std::map<std::string, cv::Scalar>
 {
   std::map<std::string, cv::Scalar> classesColors;
   auto datasets = tree.get_child_optional("classesColorsMap");
-  if (datasets.has_value())
+  if (datasets.is_initialized())
   {
     for (auto const& item : datasets.get())
     {
@@ -37,13 +42,13 @@ void ProjectFile::iterateOverDatasets(boost::property_tree::ptree& pt,
                                       std::function<void(const std::string&, const std::string&)>&& cb)
 {
   auto datasets = pt.get_child_optional("datasets");
-  if (datasets.has_value())
+  if (datasets.is_initialized())
   {
     for (auto const& item : datasets.get())
     {
       auto images = item.second.get_optional<std::string>("images");
       auto annotations = item.second.get_optional<std::string>("annotations");
-      if (images.has_value() && annotations.has_value())
+      if (images.is_initialized() && annotations.is_initialized())
       {
         cb(images.get(), annotations.get());
       }

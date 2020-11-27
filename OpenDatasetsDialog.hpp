@@ -6,6 +6,8 @@
 #include <opencv2/core/types.hpp>
 #include <boost/property_tree/ptree.hpp>
 
+#include <set>
+
 QT_BEGIN_NAMESPACE
 class QComboBox;
 class QLabel;

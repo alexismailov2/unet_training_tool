@@ -91,7 +91,7 @@ StartTrainingDialog::StartTrainingDialog(std::string const& projectFileName, QWi
 void StartTrainingDialog::trainingProcess()
 {
   auto datasetFolderPathes = _pt.get_child_optional("datasets");
-  if (!datasetFolderPathes.has_value())
+  if (!datasetFolderPathes.is_initialized())
   {
     QMessageBox msgBox;
     msgBox.setText("Could not be found any dataset folder in the project file!");
@@ -99,7 +99,7 @@ void StartTrainingDialog::trainingProcess()
     return;
   }
 
-  QString dir = QFileDialog::getExistingDirectory(this, tr("Open directory with \"labelme\" annotations"),
+  QString dir = QFileDialog::getExistingDirectory(this, tr("Open directory for saving generated network"),
                                                   ".",
                                                   QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
   if (dir.isEmpty())
@@ -133,18 +133,19 @@ void StartTrainingDialog::trainingProcess()
     msgBox.exec();
     return;
   }
-#if 1
-
+#if 0
   for (auto const& datasetFolderPath : datasetFolderPathes.get())
   {
     auto annotations = datasetFolderPath.second.get_optional<std::string>("annotations");
     auto images = datasetFolderPath.second.get_optional<std::string>("images");
-    if (!annotations.has_value() || !images.has_value())
+    if (!annotations.is_initialized() || !images.is_initialized())
     {
       continue;
     }
-    fs::create_directories(convertedDatasetDir.toStdString() + "/masks");
-    fs::create_directories(convertedDatasetDir.toStdString() + "/images");
+    fs::create_directories(convertedDatasetDir.toStdString() + "/masksT");
+    fs::create_directories(convertedDatasetDir.toStdString() + "/imagesT");
+    fs::create_directories(convertedDatasetDir.toStdString() + "/masksV");
+    fs::create_directories(convertedDatasetDir.toStdString() + "/imagesV");
     auto const heightDownscale = 2;
     auto const widthDownscale = 1;
     auto const initialFeatureCount = _pt.get<uint32_t>("UNet.featuresCount");
@@ -171,13 +172,13 @@ void StartTrainingDialog::trainingProcess()
         continue;
       }
       cv::resize(mask, mask, cv::Size{(mask.cols / widthDownscale), (mask.rows / heightDownscale)}, 0, 0, cv::INTER_NEAREST);
-      auto truncatedCols = mask.cols & (~((1 << initialFeatureCount) - 1));
-      auto truncatedRows = mask.rows & (~((1 << initialFeatureCount) - 1));
-      auto roi = cv::Rect{(mask.cols - truncatedCols) / 2, (mask.rows - truncatedRows) / 2, truncatedCols, truncatedRows};
+      auto truncatedCols = mask.cols & (~(initialFeatureCount - 1));
+      auto truncatedRows = mask.rows & (~(initialFeatureCount - 1));
+      auto roi = cv::Rect{((mask.cols - truncatedCols) / 2) + 256 + 128, (mask.rows - truncatedRows) / 2, truncatedCols - 512, truncatedRows};
       auto filename = file.path().filename().string();
       filename = filename.substr(0, filename.size() - 4);
       cv::Mat maskCropped = roi.empty() ? mask : mask(roi);
-      cv::imwrite(convertedDatasetDir.toStdString() + "/masks/" + filename + "png", maskCropped);
+      cv::imwrite(convertedDatasetDir.toStdString() + "/masks" + ((currentLabel & 1) ? "T/" : "V/") + filename + "png", maskCropped);
 
       const bool isClahe = false;
       cv::Mat image = cv::imread(images.get() + "/" + filename + "jpg");
@@ -193,7 +194,7 @@ void StartTrainingDialog::trainingProcess()
         clahe->apply(image, image);
       }
       cv::Mat imageCropped = roi.empty() ? image : image(roi);
-      cv::imwrite(convertedDatasetDir.toStdString() + "/images/" + filename + "png", imageCropped);
+      cv::imwrite(convertedDatasetDir.toStdString() + "/images" + ((currentLabel & 1) ? "T/" : "V/") + filename + "png", imageCropped);
 
       progressDialog.setValue(currentLabel);
       progressDialog.setLabelText(tr("Processed label number %1 of %n ...", nullptr, annotationsList.size()).arg(currentLabel++));
@@ -215,18 +216,20 @@ void StartTrainingDialog::trainingProcess()
   for (auto const& colorToClass : colorsToClassMap)
   {
     params["--colors-to-class-map"].emplace_back(colorToClass.first);
-    params["--colors-to-class-map"].emplace_back(std::to_string(colorToClass.second[2]));
-    params["--colors-to-class-map"].emplace_back(std::to_string(colorToClass.second[1]));
     params["--colors-to-class-map"].emplace_back(std::to_string(colorToClass.second[0]));
+    params["--colors-to-class-map"].emplace_back(std::to_string(colorToClass.second[1]));
+    params["--colors-to-class-map"].emplace_back(std::to_string(colorToClass.second[2]));
     params["--selected-classes-and-thresholds"].emplace_back(colorToClass.first);
     params["--selected-classes-and-thresholds"].emplace_back("0.3");
+    // TODO: tempoarry hack
+    break;
   }
   params["--epochs"] = {"500"};
   fs::create_directories(modelFilePath + "_checkpoints");
   params["--checkpoints-output"] = {modelFilePath + "_checkpoints"};
-  params["--train-directories"] = {convertedDatasetDir.toStdString() + "/images/",convertedDatasetDir.toStdString() + "/masks/"};
-  params["--valid-directories"] = {convertedDatasetDir.toStdString() + "/images/",convertedDatasetDir.toStdString() + "/masks/"};
-  params["--model-darknet"] = {modelFilePath};
+  params["--train-directories"] = {convertedDatasetDir.toStdString() + "/imagesT/",convertedDatasetDir.toStdString() + "/masksT/"};
+  params["--valid-directories"] = {convertedDatasetDir.toStdString() + "/imagesV/",convertedDatasetDir.toStdString() + "/masksV/"};
+  params["--model-darknet"] = {modelFilePath, "/home/user/WORK/DeffectsFinder/unet_training_tool/cmake-build-debug/unet_1c1cl4l32f.cfg_checkpoints/best_15.weights"};
   params["--size-downscaled"] = {"0","0"};
   params["--grayscale"] = {"yes"};
   runOpts(params);
