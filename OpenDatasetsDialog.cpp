@@ -269,7 +269,17 @@ void OpenDatasetsDialog::openCurrentDataset(std::string const& imagesDirectoryPa
    progressDialog.setWindowTitle(tr("Counting labels"));
 
    auto currentLabel = 0;
-   for (auto file : imageList)
+   QString dir = QFileDialog::getExistingDirectory(this, tr("Open directory for saving split dataset"),
+                                                  ".",
+                                                  QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
+   if (dir.isEmpty())
+   {
+     QMessageBox msgBox;
+     msgBox.setText("Should be selected folder for saving split dataset!");
+     msgBox.exec();
+     return;
+   }
+   for (auto const& file : imageList)
    {
      auto filename = file.path().filename().string();
      filename = filename.substr(0,filename.find_last_of('.'));
@@ -286,11 +296,48 @@ void OpenDatasetsDialog::openCurrentDataset(std::string const& imagesDirectoryPa
      {
        _dataset.emplace_back(file.path().string(), labelsDirectoryPath + "/" + filename + ".json");
        LabelMeDeleteImage(_dataset.back().second);
-       if (!CountingLabeledObjects(allLabelsByName, _dataset.back().second))
+       ////
+       std::string const splitDir = dir.toStdString();//"/Users/alexanderismailov/WOR/Upwork/deffects_viewer_qt/_/unet_training_tool/dataset2archive1/split";
+       std::map<std::string, uint32_t> classesExist;
+       if (!CountingLabeledObjects(classesExist, _dataset.back().second, true))
        {
          QMessageBox msgBox;
          msgBox.setText(QString::fromStdString(std::string("The file: ") + labelsDirectoryPath + "/" + filename + ".json" + "is wrong!"));
          msgBox.exec();
+         continue;
+       }
+       for (auto const& classExist : classesExist)
+       {
+         fs::create_directories(splitDir + "/" + classExist.first + "/images");
+         fs::create_directories(splitDir + "/" + classExist.first + "/data");
+         if (classesExist.find("trash") != classesExist.end())
+         {
+           fs::copy(_dataset.back().first, splitDir + "/" + "trash" + "/images");
+           fs::copy(_dataset.back().second, splitDir + "/" + "trash" + "/data");
+           bp::ptree ptData;
+           auto const newImagePath = splitDir + "/" + "trash" + "/images/" + fs::path(_dataset.back().first).filename().string();
+           auto const newDataPath = splitDir + "/" + "trash" + "/data/" + fs::path(_dataset.back().second).filename().string();
+           bp::read_json(newDataPath, ptData);
+           ptData.put<std::string>("imagePath", newImagePath);
+           bp::write_json(newDataPath, ptData);
+           break;
+         }
+         fs::copy(_dataset.back().first, splitDir + "/" + classExist.first + "/images");
+         fs::copy(_dataset.back().second, splitDir + "/" + classExist.first + "/data");
+         bp::ptree ptData;
+         auto const newImagePath = splitDir + "/" + classExist.first + "/images/" + fs::path(_dataset.back().first).filename().string();
+         auto const newDataPath = splitDir + "/" + classExist.first + "/data/" + fs::path(_dataset.back().second).filename().string();
+         bp::read_json(newDataPath, ptData);
+         ptData.put<std::string>("imagePath", newImagePath);
+         bp::write_json(newDataPath, ptData);
+       }
+       ////
+       if (!CountingLabeledObjects(allLabelsByName, _dataset.back().second, true))
+       {
+         QMessageBox msgBox;
+         msgBox.setText(QString::fromStdString(std::string("The file: ") + labelsDirectoryPath + "/" + filename + ".json" + "is wrong!"));
+         msgBox.exec();
+         continue;
        }
      }
      auto filePathQ = QString::fromStdString(_dataset.back().first);

@@ -121,12 +121,18 @@ NewTrainingProjectDialog::NewTrainingProjectDialog(bool isOpen, QWidget *parent)
           auto imagePathOpt = annotation.get_optional<std::string>("imagePath");
           if (imagePathOpt.is_initialized())
           {
+            auto imageDir = QDir("");
+            imagePath = imageDir.cleanPath(imageDir.absoluteFilePath(QString::fromStdString(imagePathOpt.get()))).toStdString();
+            auto imageDirPath = imagePathOpt.get().substr(0, imagePathOpt.get().find_last_of('/'));
+            imagePath = imageDirPath;
+#if 0 // TODO: Should be deleted after test
             auto imageDirPath = imagePathOpt.get().substr(0, imagePathOpt.get().find_last_of('\\'));
             std::replace(imageDirPath.begin(), imageDirPath.end(), '\\', '/');
             auto const lastSlashPos = fullPath.find_last_of('/');
             auto const directory = fullPath.substr(0, lastSlashPos + 1);
             auto imagesRelativeDirectory = QDir::toNativeSeparators(QString::fromStdString(imageDirPath)).toStdString();
             imagePath = QDir::toNativeSeparators(QString::fromStdString(directory)).toStdString() + imagesRelativeDirectory;
+#endif
             break;
           }
         }
