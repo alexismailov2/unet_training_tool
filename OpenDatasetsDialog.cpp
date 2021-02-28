@@ -261,7 +261,11 @@ void OpenDatasetsDialog::openCurrentDataset(std::string const& imagesDirectoryPa
                                             std::map<std::string, uint32_t>& allLabelsByName,
                                             std::set<cv::Vec3b>& colorSet)
 {
-   std::vector<fs::directory_entry> imageList(fs::directory_iterator{imagesDirectoryPath}, fs::directory_iterator{});
+   auto imagesDirectoryPathCopy = imagesDirectoryPath;
+   std::replace(imagesDirectoryPathCopy.begin(), imagesDirectoryPathCopy.end(), '\\', '/');
+   auto lastSlash = imagesDirectoryPathCopy.find_last_of("/");
+   auto imagesDirectoryPathFixed = fs::path(imagesDirectoryPath).is_absolute() ? imagesDirectoryPath : labelsDirectoryPath + "/" + imagesDirectoryPathCopy.substr(0, lastSlash);
+   std::vector<fs::directory_entry> imageList(fs::directory_iterator{imagesDirectoryPathFixed}, fs::directory_iterator{});
 
    QProgressDialog progressDialog(this);
    progressDialog.setCancelButtonText(tr("&Cancel"));
