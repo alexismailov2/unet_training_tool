@@ -36,6 +36,24 @@ StartTrainingDialog::StartTrainingDialog(std::string const& projectFileName, QWi
 
   boost::property_tree::read_json(_projectFileName, _pt);
 
+  if (!_pt.get_optional<uint32_t>("UNet.inputChannels").is_initialized())
+  {
+    _pt.put<uint32_t>("UNet.inputChannels", 1);
+  }
+  if (!_pt.get_optional<uint32_t>("UNet.outputChannels").is_initialized())
+  {
+    _pt.put<uint32_t>("UNet.outputChannels", 1);
+  }
+  if (!_pt.get_optional<uint32_t>("UNet.layersCount").is_initialized())
+  {
+    _pt.put<uint32_t>("UNet.layersCount", 3);
+  }
+  if (!_pt.get_optional<uint32_t>("UNet.featuresCount").is_initialized())
+  {
+    _pt.put<uint32_t>("UNet.featuresCount", 3);
+  }
+  boost::property_tree::write_json(_projectFileName, _pt);
+
   auto inputChannelsComboBox = createComboBox({"1", "3"},this);
   connect(inputChannelsComboBox, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged), [this](int index) {
     _pt.put<uint32_t>("UNet.inputChannels", index == 0 ? 1 : 3);
@@ -70,6 +88,26 @@ StartTrainingDialog::StartTrainingDialog(std::string const& projectFileName, QWi
     boost::property_tree::write_json(_projectFileName, _pt);
   });
 
+  auto heightDownscaleSpinBox = new QSpinBox{this};
+  heightDownscaleSpinBox->setSingleStep(1);
+  heightDownscaleSpinBox->setValue(_pt.get<uint32_t>("UNet.heightDownscale", 1));
+  heightDownscaleSpinBox->setMinimum(1);
+  heightDownscaleSpinBox->setMaximum(16);
+  connect(heightDownscaleSpinBox, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged), [this](int value) {
+    _pt.put<uint32_t>("UNet.heightDownscale", value);
+    boost::property_tree::write_json(_projectFileName, _pt);
+  });
+
+  auto widthDownscaleSpinBox = new QSpinBox{this};
+  widthDownscaleSpinBox->setSingleStep(1);
+  widthDownscaleSpinBox->setValue(_pt.get<uint32_t>("UNet.widthDownscale", 1));
+  widthDownscaleSpinBox->setMinimum(1);
+  widthDownscaleSpinBox->setMaximum(16);
+  connect(widthDownscaleSpinBox, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged), [this](int value) {
+    _pt.put<uint32_t>("UNet.widthDownscale", value);
+    boost::property_tree::write_json(_projectFileName, _pt);
+  });
+
   auto startTrainingButton = new QPushButton(tr("Start training"), this);
   connect(startTrainingButton, &QAbstractButton::clicked, [this](){
     trainingProcess();
@@ -84,7 +122,11 @@ StartTrainingDialog::StartTrainingDialog(std::string const& projectFileName, QWi
   mainLayout->addWidget(levelsCountSpinBox, 2, 1);
   mainLayout->addWidget(new QLabel(tr("Initial features count:")), 3, 0);
   mainLayout->addWidget(featuresCountPowSpinBox, 3, 1);
-  mainLayout->addWidget(startTrainingButton, 4, 0);
+  mainLayout->addWidget(new QLabel(tr("Width downscale:")), 4, 0);
+  mainLayout->addWidget(widthDownscaleSpinBox, 4, 1);
+  mainLayout->addWidget(new QLabel(tr("Height downscale:")), 5, 0);
+  mainLayout->addWidget(heightDownscaleSpinBox, 5, 1);
+  mainLayout->addWidget(startTrainingButton, 6, 0);
   setLayout(mainLayout);
 }
 
@@ -133,7 +175,94 @@ void StartTrainingDialog::trainingProcess()
     msgBox.exec();
     return;
   }
+#if 1
+  fs::create_directories(convertedDatasetDir.toStdString() + "/masksT");
+  fs::create_directories(convertedDatasetDir.toStdString() + "/imagesT");
+  fs::create_directories(convertedDatasetDir.toStdString() + "/masksV");
+  fs::create_directories(convertedDatasetDir.toStdString() + "/imagesV");
+
+  auto const isClahe = false;
+  auto const heightDownscale = _pt.get<uint32_t>("UNet.heightDownscale");
+  auto const widthDownscale = _pt.get<uint32_t>("UNet.widthDownscale");
+  auto const initialFeatureCount = _pt.get<uint32_t>("UNet.featuresCount");
+  auto colorToClass = ProjectFile::loadColors(_pt);
+
+  /// Getting whole list
+  std::vector<std::pair<std::string, std::string>> wholeDatasetList;
+  for (auto const& datasetFolderPath : datasetFolderPathes.get())
+  {
+      auto annotations = datasetFolderPath.second.get_optional<std::string>("annotations");
+      auto images = datasetFolderPath.second.get_optional<std::string>("images");
+      if (!annotations.is_initialized() || !images.is_initialized())
+      {
+          continue;
+      }
+      for (auto const& file : fs::directory_iterator{images.get()})
+      {
+          if (fs::is_directory(file))
+          {
+              continue;
+          }
+          auto filename = file.path().filename().string();
+          filename = filename.substr(0, filename.size() - 4);
+          wholeDatasetList.emplace_back(std::make_pair(file.path().string(), annotations.get() + "/" + filename + ".json"));
+      }
+  }
+  std::random_device rd;
+  std::mt19937 g(rd());
+  std::shuffle(wholeDatasetList.begin(), wholeDatasetList.end(), g);
+  ////
+
+  QProgressDialog progressDialog(this);
+  progressDialog.setCancelButtonText(tr("&Cancel"));
+  progressDialog.setRange(0, wholeDatasetList.size());
+  progressDialog.setWindowTitle(tr("Counting labels"));
+
+  auto currentLabel = 0;
+  for (auto const& datasetItem : wholeDatasetList)
+  {
+      cv::Mat mask = ConvertPolygonsToMask(datasetItem.second, colorToClass);
+      if (mask.empty())
+      {
+          QMessageBox msgBox;
+          msgBox.setText(QString("Could not be gotten mask from annotation file: ") + QString::fromStdString(datasetItem.second));
+          msgBox.exec();
+          continue;
+      }
+      cv::resize(mask, mask, cv::Size{(mask.cols / widthDownscale), (mask.rows / heightDownscale)}, 0, 0, cv::INTER_NEAREST);
+      auto truncatedCols = mask.cols & (~(initialFeatureCount - 1));
+      auto truncatedRows = mask.rows & (~(initialFeatureCount - 1));
+      auto const offsetX = 0; //256 + 128;
+      auto const sizeSubX = 0; //512;
+      auto roi = cv::Rect{((mask.cols - truncatedCols) / 2) + offsetX, (mask.rows - truncatedRows) / 2, truncatedCols - sizeSubX, truncatedRows};
+
+      auto isTraining = currentLabel > wholeDatasetList.size() * 0.1f;
+      cv::Mat maskCropped = roi.empty() ? mask : mask(roi);
+      auto filename = fs::path(datasetItem.first).filename().replace_extension("png").string();
+      cv::imwrite(convertedDatasetDir.toStdString() + "/masks" + (isTraining ? "T/" : "V/") + filename, maskCropped);
+
+      cv::Mat image = cv::imread(datasetItem.first);
+      cv::resize(image, image, cv::Size{(image.cols / widthDownscale), (image.rows / heightDownscale)}, 0, 0, cv::INTER_NEAREST);
+      if (isClahe)
+      {
+          auto clahe = cv::createCLAHE();
+          cv::cvtColor(image, image, cv::COLOR_BGR2GRAY);
+          clahe->apply(image, image);
+      }
+      cv::Mat imageCropped = roi.empty() ? image : image(roi);
+      cv::imwrite(convertedDatasetDir.toStdString() + "/images" + (isTraining ? "T/" : "V/") + filename, imageCropped);
+
+      progressDialog.setValue(currentLabel);
+      progressDialog.setLabelText(tr("Processed label number %1 of %n ...", nullptr, wholeDatasetList.size()).arg(currentLabel++));
+      QCoreApplication::processEvents();
+
+      if (progressDialog.wasCanceled())
+      {
+          break;
+      }
+  }
 #if 0
+  auto currentLabel = 0;
   for (auto const& datasetFolderPath : datasetFolderPathes.get())
   {
     auto annotations = datasetFolderPath.second.get_optional<std::string>("annotations");
@@ -142,21 +271,12 @@ void StartTrainingDialog::trainingProcess()
     {
       continue;
     }
-    fs::create_directories(convertedDatasetDir.toStdString() + "/masksT");
-    fs::create_directories(convertedDatasetDir.toStdString() + "/imagesT");
-    fs::create_directories(convertedDatasetDir.toStdString() + "/masksV");
-    fs::create_directories(convertedDatasetDir.toStdString() + "/imagesV");
     auto const heightDownscale = 2;
     auto const widthDownscale = 1;
     auto const initialFeatureCount = _pt.get<uint32_t>("UNet.featuresCount");
     auto colorToClass = ProjectFile::loadColors(_pt);
 
     std::vector<fs::directory_entry> annotationsList(fs::directory_iterator{annotations.get()}, fs::directory_iterator{});
-    QProgressDialog progressDialog(this);
-    progressDialog.setCancelButtonText(tr("&Cancel"));
-    progressDialog.setRange(0, annotationsList.size());
-    progressDialog.setWindowTitle(tr("Counting labels"));
-    auto currentLabel = 0;
     for (auto const& file : annotationsList)
     {
       if (fs::is_directory(file))
@@ -180,7 +300,7 @@ void StartTrainingDialog::trainingProcess()
       cv::Mat maskCropped = roi.empty() ? mask : mask(roi);
       cv::imwrite(convertedDatasetDir.toStdString() + "/masks" + ((currentLabel & 1) ? "T/" : "V/") + filename + "png", maskCropped);
 
-      const bool isClahe = false;
+      const bool isClahe = true;
       cv::Mat image = cv::imread(images.get() + "/" + filename + "jpg");
       if (image.empty())
       {
@@ -207,6 +327,7 @@ void StartTrainingDialog::trainingProcess()
     }
   }
 #endif
+#endif
   QMessageBox msgBox;
   msgBox.setText("Are you ready to train?");
   msgBox.exec();
@@ -216,9 +337,9 @@ void StartTrainingDialog::trainingProcess()
   for (auto const& colorToClass : colorsToClassMap)
   {
     params["--colors-to-class-map"].emplace_back(colorToClass.first);
-    params["--colors-to-class-map"].emplace_back(std::to_string(colorToClass.second[0]));
-    params["--colors-to-class-map"].emplace_back(std::to_string(colorToClass.second[1]));
     params["--colors-to-class-map"].emplace_back(std::to_string(colorToClass.second[2]));
+    params["--colors-to-class-map"].emplace_back(std::to_string(colorToClass.second[1]));
+    params["--colors-to-class-map"].emplace_back(std::to_string(colorToClass.second[0]));
     params["--selected-classes-and-thresholds"].emplace_back(colorToClass.first);
     params["--selected-classes-and-thresholds"].emplace_back("0.3");
     // TODO: tempoarry hack
@@ -229,7 +350,7 @@ void StartTrainingDialog::trainingProcess()
   params["--checkpoints-output"] = {modelFilePath + "_checkpoints"};
   params["--train-directories"] = {convertedDatasetDir.toStdString() + "/imagesT/",convertedDatasetDir.toStdString() + "/masksT/"};
   params["--valid-directories"] = {convertedDatasetDir.toStdString() + "/imagesV/",convertedDatasetDir.toStdString() + "/masksV/"};
-  params["--model-darknet"] = {modelFilePath, "/home/user/WORK/DeffectsFinder/unet_training_tool/cmake-build-debug/unet_1c1cl4l32f.cfg_checkpoints/best_15.weights"};
+  params["--model-darknet"] = {modelFilePath};
   params["--size-downscaled"] = {"0","0"};
   params["--grayscale"] = {"yes"};
   runOpts(params);

@@ -286,6 +286,7 @@ void OpenDatasetsDialog::openCurrentDataset(std::string const& imagesDirectoryPa
    for (auto const& file : imageList)
    {
      auto filename = file.path().filename().string();
+     auto fileext = file.path().extension().string();
      filename = filename.substr(0,filename.find_last_of('.'));
      if (fs::exists(labelsDirectoryPath + "/" + filename + ".png"))
      {
@@ -343,6 +344,9 @@ void OpenDatasetsDialog::openCurrentDataset(std::string const& imagesDirectoryPa
          msgBox.exec();
          continue;
        }
+     }
+     else {
+         continue;
      }
      auto filePathQ = QString::fromStdString(_dataset.back().first);
      const QString toolTip = QDir::toNativeSeparators(filePathQ);
