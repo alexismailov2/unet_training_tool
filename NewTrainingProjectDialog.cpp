@@ -121,9 +121,10 @@ NewTrainingProjectDialog::NewTrainingProjectDialog(bool isOpen, QWidget *parent)
           auto imagePathOpt = annotation.get_optional<std::string>("imagePath");
           if (imagePathOpt.is_initialized())
           {
-            auto imageDir = QDir("");
+            auto imageDir = QDir(fs::path(fullPath).remove_filename().string().c_str());
             imagePath = imageDir.cleanPath(imageDir.absoluteFilePath(QString::fromStdString(imagePathOpt.get()))).toStdString();
-            auto imageDirPath = imagePathOpt.get().substr(0, imagePathOpt.get().find_last_of('/'));
+            std::replace(imagePath.begin(), imagePath.end(), '\\', '/');
+            auto imageDirPath = imagePath.substr(0, imagePath.find_last_of('/'));
             imagePath = imageDirPath;
 #if 0 // TODO: Should be deleted after test
             auto imageDirPath = imagePathOpt.get().substr(0, imagePathOpt.get().find_last_of('\\'));
