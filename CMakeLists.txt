@@ -71,6 +71,8 @@ else ()
         OpenDatasetsDialog.hpp
         StartTrainingDialog.hpp
         StartTrainingDialog.cpp
+        StartValidatingDialog.hpp
+        StartValidatingDialog.cpp
         ProjectFile.cpp
         ProjectFile.hpp
         #${TS_FILES}
@@ -78,9 +80,10 @@ else ()
 endif ()
 
 set(STD_FILESYSTEM)
-if (NOT APPLE)
+if (NOT APPLE AND NOT MSVC)
     set(STD_FILESYSTEM stdc++fs)
 endif ()
+message(STATUS STD_FILESYSTEM=${STD_FILESYSTEM})
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
     Qt${QT_VERSION_MAJOR}::Widgets
@@ -88,5 +91,30 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     ${Boost_LIBS}
     ${STD_FILESYSTEM}
     train_unet_darknet2dl)
+
+# Tanks windows for this unneeded workaround
+if(MSVC)
+    if("${CUSTOM_TORCH_BUILD_PATH}" STREQUAL "")
+        find_package(Torch REQUIRED)
+    else()
+        find_package(Torch REQUIRED PATHS ${CUSTOM_TORCH_BUILD_PATH} NO_DEFAULT_PATH)
+    endif()
+
+    file(GLOB TORCH_DLLS "${TORCH_INSTALL_PREFIX}/lib/*.dll")
+    foreach(TORCH_DLL ${TORCH_DLLS})
+        message(STATUS TORCH_DLL=${TORCH_DLL})
+        file(COPY ${TORCH_DLL} DESTINATION ${CMAKE_BINARY_DIR})
+    endforeach()
+    file(GLOB OPENCV_DLLS "${CUSTOM_OPENCV_BUILD_PATH}/x64/vc15/bin/*.dll")
+    foreach(OPENCV_DLL ${OPENCV_DLLS})
+        message(STATUS OPENCV_DLL=${OPENCV_DLL})
+        file(COPY ${OPENCV_DLL} DESTINATION ${CMAKE_BINARY_DIR})
+    endforeach()
+    set(QTPLATFORM_FOLDER "C:/Qt/5.15.2/msvc2015_64/plugins/platforms")
+    file(COPY ${QTPLATFORM_FOLDER} DESTINATION ${CMAKE_BINARY_DIR})
+    #file(COPY "C:/Qt/5.15.2/msvc2015_64/bin/Qt5Cored.dll" DESTINATION ${CMAKE_BINARY_DIR})
+    #file(COPY "C:/Qt/5.15.2/msvc2015_64/bin/Qt5Guid.dll" DESTINATION ${CMAKE_BINARY_DIR})
+    #file(COPY "C:/Qt/5.15.2/msvc2015_64/bin/Qt5Widgetsd.dll" DESTINATION ${CMAKE_BINARY_DIR})
+endif(MSVC)
 
 #qt5_create_translation(QM_FILES ${CMAKE_SOURCE_DIR} ${TS_FILES})

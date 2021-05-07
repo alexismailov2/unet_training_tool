@@ -50,7 +50,11 @@ void ProjectFile::iterateOverDatasets(boost::property_tree::ptree& pt,
       auto annotations = item.second.get_optional<std::string>("annotations");
       if (images.is_initialized() && annotations.is_initialized())
       {
-        cb(images.get(), annotations.get());
+        std::string imagesPath = images.get();
+        std::replace(imagesPath.begin(), imagesPath.end(), '\\', '/');
+        std::string annotationsPath = annotations.get();
+        std::replace(annotationsPath.begin(), annotationsPath.end(), '\\', '/');
+        cb(imagesPath, annotationsPath);
       }
     }
   }

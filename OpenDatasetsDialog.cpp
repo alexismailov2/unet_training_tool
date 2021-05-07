@@ -288,9 +288,12 @@ void OpenDatasetsDialog::openCurrentDataset(std::string const& imagesDirectoryPa
      auto filename = file.path().filename().string();
      auto fileext = file.path().extension().string();
      filename = filename.substr(0,filename.find_last_of('.'));
-     if (fs::exists(labelsDirectoryPath + "/" + filename + ".png"))
+     auto testFolderPath = labelsDirectoryPath + "/" + filename + ".json";
+     std::cout << testFolderPath << std::endl;
+     auto res = fs::exists(testFolderPath);
+     if (fs::exists(labelsDirectoryPath + "/" + filename + fileext))
      {
-       _dataset.emplace_back(file.path().string(), labelsDirectoryPath + "/" + filename + ".png");
+       _dataset.emplace_back(file.path().string(), labelsDirectoryPath + "/" + filename + fileext);
        auto currentLabels = calculateLabels(colorSet, _dataset.back().second);
        for (auto const& rects : currentLabels)
        {
@@ -302,7 +305,7 @@ void OpenDatasetsDialog::openCurrentDataset(std::string const& imagesDirectoryPa
        _dataset.emplace_back(file.path().string(), labelsDirectoryPath + "/" + filename + ".json");
        LabelMeDeleteImage(_dataset.back().second);
        ////
-       std::string const splitDir = dir.toStdString();//"/Users/alexanderismailov/WOR/Upwork/deffects_viewer_qt/_/unet_training_tool/dataset2archive1/split";
+       std::string const splitDir = dir.toStdString();
        std::map<std::string, uint32_t> classesExist;
        if (!CountingLabeledObjects(classesExist, _dataset.back().second, true))
        {

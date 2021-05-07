@@ -1,6 +1,8 @@
 #include "StartTrainingDialog.hpp"
 #include "ProjectFile.hpp"
 
+#include <third_party/UNetDarknetTorch/include/UNet/TrainUnet2D.hpp>
+
 #include <QtWidgets>
 
 #include <boost/property_tree/json_parser.hpp>
@@ -10,8 +12,6 @@
 namespace fs = std::filesystem;
 #else
 #include <experimental/filesystem>
-#include <third_party/UNetDarknetTorch/include/UNet/TrainUnet2D.hpp>
-
 namespace fs = std::experimental::filesystem;
 #endif
 
@@ -108,11 +108,31 @@ StartTrainingDialog::StartTrainingDialog(std::string const& projectFileName, QWi
     boost::property_tree::write_json(_projectFileName, _pt);
   });
 
+  auto epochsCountSpinBox = new QSpinBox{this};
+  epochsCountSpinBox->setSingleStep(1);
+  epochsCountSpinBox->setValue(_pt.get<uint32_t>("UNet.epochsCount", 200));
+  epochsCountSpinBox->setMinimum(1);
+  epochsCountSpinBox->setMaximum(100000);
+  connect(epochsCountSpinBox, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged), [this](int value) {
+    _pt.put<uint32_t>("UNet.epochsCount", value);
+    boost::property_tree::write_json(_projectFileName, _pt);
+  });
+
   auto startTrainingButton = new QPushButton(tr("Start training"), this);
   connect(startTrainingButton, &QAbstractButton::clicked, [this](){
     trainingProcess();
   });
-
+  auto weightsFilePathButton = new QPushButton(tr("Weights path"), this);
+  connect(weightsFilePathButton, &QAbstractButton::clicked, [this](){
+      auto weightsFilePath = QFileDialog::getOpenFileName(this, tr("Select weights file"),".",tr("Darknet weights (*.weights)")).toStdString();
+      _pt.put<std::string>("UNet.weightsFilePath", weightsFilePath);
+      boost::property_tree::write_json(_projectFileName, _pt);
+  });
+  auto isEvalCheckBox = new QCheckBox(tr("Evaluation only"), this);
+  connect(isEvalCheckBox, &QCheckBox::clicked, [this](bool isChecked){
+      _pt.put<bool>("UNet.evaluationOnly", isChecked);
+      boost::property_tree::write_json(_projectFileName, _pt);
+  });
   auto mainLayout = new QGridLayout;
   mainLayout->addWidget(new QLabel(tr("Input channels count:")), 0, 0);
   mainLayout->addWidget(inputChannelsComboBox, 0, 1);
@@ -126,7 +146,13 @@ StartTrainingDialog::StartTrainingDialog(std::string const& projectFileName, QWi
   mainLayout->addWidget(widthDownscaleSpinBox, 4, 1);
   mainLayout->addWidget(new QLabel(tr("Height downscale:")), 5, 0);
   mainLayout->addWidget(heightDownscaleSpinBox, 5, 1);
-  mainLayout->addWidget(startTrainingButton, 6, 0);
+  mainLayout->addWidget(new QLabel(tr("Epochs count:")), 6, 0);
+  mainLayout->addWidget(epochsCountSpinBox, 6, 1);
+  mainLayout->addWidget(new QLabel(tr("Weights file path:")), 7, 0);
+  mainLayout->addWidget(weightsFilePathButton, 7, 1);
+  mainLayout->addWidget(isEvalCheckBox, 8, 0);
+  mainLayout->addWidget(startTrainingButton, 9, 0);
+
   setLayout(mainLayout);
 }
 
@@ -156,6 +182,7 @@ void StartTrainingDialog::trainingProcess()
                        _pt.get<std::string>("UNet.outputChannels", "7") + "cl" +
                        _pt.get<std::string>("UNet.layersCount", "4") + "l" +
                        _pt.get<std::string>("UNet.featuresCount", "5") + "f" + ".cfg";
+  auto weightsFilePath = _pt.get<std::string>("UNet.weightsFilePath", "");
   _pt.put<std::string>("UNet.modelFilePath", modelFilePath);
   boost::property_tree::write_json(_projectFileName, _pt);
   runOpts({{std::string("--generate-custom-unet"), {
@@ -229,12 +256,12 @@ void StartTrainingDialog::trainingProcess()
           msgBox.exec();
           continue;
       }
-      cv::resize(mask, mask, cv::Size{(mask.cols / widthDownscale), (mask.rows / heightDownscale)}, 0, 0, cv::INTER_NEAREST);
+      cv::resize(mask, mask, cv::Size((mask.cols) / widthDownscale, (((uint32_t)mask.rows) / heightDownscale)), 0, 0, cv::INTER_NEAREST);
       auto truncatedCols = mask.cols & (~(initialFeatureCount - 1));
       auto truncatedRows = mask.rows & (~(initialFeatureCount - 1));
       auto const offsetX = 0; //256 + 128;
       auto const sizeSubX = 0; //512;
-      auto roi = cv::Rect{((mask.cols - truncatedCols) / 2) + offsetX, (mask.rows - truncatedRows) / 2, truncatedCols - sizeSubX, truncatedRows};
+      auto roi = cv::Rect(((mask.cols - truncatedCols) / 2) + offsetX, (mask.rows - truncatedRows) / 2, truncatedCols - sizeSubX, truncatedRows);
 
       auto isTraining = currentLabel > wholeDatasetList.size() * 0.1f;
       cv::Mat maskCropped = roi.empty() ? mask : mask(roi);
@@ -242,7 +269,7 @@ void StartTrainingDialog::trainingProcess()
       cv::imwrite(convertedDatasetDir.toStdString() + "/masks" + (isTraining ? "T/" : "V/") + filename, maskCropped);
 
       cv::Mat image = cv::imread(datasetItem.first);
-      cv::resize(image, image, cv::Size{(image.cols / widthDownscale), (image.rows / heightDownscale)}, 0, 0, cv::INTER_NEAREST);
+      cv::resize(image, image, cv::Size((image.cols / widthDownscale), (image.rows / heightDownscale)), 0, 0, cv::INTER_NEAREST);
       if (isClahe)
       {
           auto clahe = cv::createCLAHE();
@@ -345,14 +372,23 @@ void StartTrainingDialog::trainingProcess()
     // TODO: tempoarry hack
     break;
   }
-  params["--epochs"] = {"500"};
+  params["--eval"] = {_pt.get<bool>("UNet.evaluationOnly") ? "yes" : "no"};
+  params["--epochs"] = {std::to_string(_pt.get<uint32_t>("UNet.epochsCount"))};
   fs::create_directories(modelFilePath + "_checkpoints");
   params["--checkpoints-output"] = {modelFilePath + "_checkpoints"};
   params["--train-directories"] = {convertedDatasetDir.toStdString() + "/imagesT/",convertedDatasetDir.toStdString() + "/masksT/"};
   params["--valid-directories"] = {convertedDatasetDir.toStdString() + "/imagesV/",convertedDatasetDir.toStdString() + "/masksV/"};
-  params["--model-darknet"] = {modelFilePath};
+  if (weightsFilePath.empty())
+  {
+      params["--model-darknet"] = {modelFilePath};
+  }
+  else
+  {
+      params["--model-darknet"] = {modelFilePath, weightsFilePath};
+  }
+
   params["--size-downscaled"] = {"0","0"};
-  params["--grayscale"] = {"yes"};
+  params["--grayscale"] = {(_pt.get<uint32_t>("UNet.inputChannels") == 1) ? "yes" : "no"};
   runOpts(params);
 
   QMessageBox msgBox1;

@@ -2,6 +2,7 @@
 
 #include "NewTrainingProjectDialog.hpp"
 #include "OpenDatasetsDialog.hpp"
+#include "StartValidatingDialog.hpp"
 
 #include <QtWidgets>
 
@@ -45,6 +46,16 @@ void MainWindow::createActions()
     }
   });
 
+  validSessionAct = new QAction(tr("&Start validation ..."), this);
+  validSessionAct->setShortcuts(QKeySequence::New);
+  validSessionAct->setStatusTip(tr("Start validation"));
+  connect(validSessionAct, &QAction::triggered, [this](){
+    auto projectFileName = QFileDialog::getOpenFileName(this, tr("Select project file"),".",tr("JSON (*.json)")).toStdString();
+    StartValidatingDialog startValidatingDialog(projectFileName, this);
+    startValidatingDialog.show();
+    startValidatingDialog.exec();
+  });
+
   exitAct = new QAction(tr("E&xit"), this);
   exitAct->setShortcuts(QKeySequence::Quit);
   exitAct->setStatusTip(tr("Exit the application"));
@@ -66,6 +77,7 @@ void MainWindow::createMenus()
   fileMenu = menuBar()->addMenu(tr("&File"));
   fileMenu->addAction(newSessionAct);
   fileMenu->addAction(openSessionAct);
+  fileMenu->addAction(validSessionAct);
   fileMenu->addSeparator();
   fileMenu->addAction(exitAct);
 
