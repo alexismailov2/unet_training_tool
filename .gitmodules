@@ -1,3 +1,6 @@
 [submodule "third_party/UNetDarknetTorch"]
 	path = third_party/UNetDarknetTorch
 	url = https://github.com/alexismailov2/UNetDarknetTorch.git
+[submodule "third_party/OpenCVUnet"]
+	path = third_party/OpenCVUnet
+	url = https://github.com/alexismailov2/OpenCVUNet.git

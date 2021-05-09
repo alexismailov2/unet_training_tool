@@ -3,10 +3,14 @@
 #include <QDialog>
 #include <QDir>
 
+#include <opencv_unet/UNet.hpp>
+
 #include <opencv2/core/types.hpp>
+
 #include <boost/property_tree/ptree.hpp>
 
 #include <set>
+
 
 QT_BEGIN_NAMESPACE
 class QComboBox;
@@ -54,4 +58,5 @@ private:
     boost::property_tree::ptree _pt;
 
     QPushButton* _startTrainingButton{};
+    UNet _unet;
 };

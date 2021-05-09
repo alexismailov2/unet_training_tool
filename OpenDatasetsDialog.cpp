@@ -85,6 +85,11 @@ void openFile(const QString &fileName)
 
 OpenDatasetsDialog::OpenDatasetsDialog(std::string const& projectFile, QWidget* parent)
    : QDialog(parent)
+   , _unet{"model/stage1/unet_3c1cl3l8f.cfg",
+           "model/stage1/best_197.weights",
+           cv::Size{8, 8},
+           {0.3},
+           true }
 {
    setWindowTitle(tr("Open datasets dialog"));
 
@@ -273,15 +278,17 @@ void OpenDatasetsDialog::openCurrentDataset(std::string const& imagesDirectoryPa
    progressDialog.setWindowTitle(tr("Counting labels"));
 
    auto currentLabel = 0;
+   bool splitDataset = true;
    QString dir = QFileDialog::getExistingDirectory(this, tr("Open directory for saving split dataset"),
                                                   ".",
                                                   QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
    if (dir.isEmpty())
    {
      QMessageBox msgBox;
-     msgBox.setText("Should be selected folder for saving split dataset!");
+     msgBox.setText("Folder for saving split dataset was not selected, this operation will be skipped!");
      msgBox.exec();
-     return;
+     splitDataset = false;
+     //return;
    }
    for (auto const& file : imageList)
    {
@@ -316,30 +323,38 @@ void OpenDatasetsDialog::openCurrentDataset(std::string const& imagesDirectoryPa
        }
        for (auto const& classExist : classesExist)
        {
-         fs::create_directories(splitDir + "/" + classExist.first + "/images");
-         fs::create_directories(splitDir + "/" + classExist.first + "/data");
+         if (splitDataset)
+         {
+             fs::create_directories(splitDir + "/" + classExist.first + "/images");
+             fs::create_directories(splitDir + "/" + classExist.first + "/data");
+         }
          if (classesExist.find("trash") != classesExist.end())
          {
-           fs::copy(_dataset.back().first, splitDir + "/" + "trash" + "/images");
-           fs::copy(_dataset.back().second, splitDir + "/" + "trash" + "/data");
-           bp::ptree ptData;
-           auto const newImagePath = splitDir + "/" + "trash" + "/images/" + fs::path(_dataset.back().first).filename().string();
-           auto const newDataPath = splitDir + "/" + "trash" + "/data/" + fs::path(_dataset.back().second).filename().string();
-           bp::read_json(newDataPath, ptData);
-           ptData.put<std::string>("imagePath", newImagePath);
-           bp::write_json(newDataPath, ptData);
+           if (splitDataset)
+           {
+               fs::copy(_dataset.back().first, splitDir + "/" + "trash" + "/images");
+               fs::copy(_dataset.back().second, splitDir + "/" + "trash" + "/data");
+               bp::ptree ptData;
+               auto const newImagePath = splitDir + "/" + "trash" + "/images/" + fs::path(_dataset.back().first).filename().string();
+               auto const newDataPath = splitDir + "/" + "trash" + "/data/" + fs::path(_dataset.back().second).filename().string();
+               bp::read_json(newDataPath, ptData);
+               ptData.put<std::string>("imagePath", newImagePath);
+               bp::write_json(newDataPath, ptData);
+           }
            break;
          }
-         fs::copy(_dataset.back().first, splitDir + "/" + classExist.first + "/images");
-         fs::copy(_dataset.back().second, splitDir + "/" + classExist.first + "/data");
-         bp::ptree ptData;
-         auto const newImagePath = splitDir + "/" + classExist.first + "/images/" + fs::path(_dataset.back().first).filename().string();
-         auto const newDataPath = splitDir + "/" + classExist.first + "/data/" + fs::path(_dataset.back().second).filename().string();
-         bp::read_json(newDataPath, ptData);
-         ptData.put<std::string>("imagePath", newImagePath);
-         bp::write_json(newDataPath, ptData);
+         if (splitDataset)
+         {
+             fs::copy(_dataset.back().first, splitDir + "/" + classExist.first + "/images");
+             fs::copy(_dataset.back().second, splitDir + "/" + classExist.first + "/data");
+             bp::ptree ptData;
+             auto const newImagePath = splitDir + "/" + classExist.first + "/images/" + fs::path(_dataset.back().first).filename().string();
+             auto const newDataPath = splitDir + "/" + classExist.first + "/data/" + fs::path(_dataset.back().second).filename().string();
+             bp::read_json(newDataPath, ptData);
+             ptData.put<std::string>("imagePath", newImagePath);
+             bp::write_json(newDataPath, ptData);
+         }
        }
-       ////
        if (!CountingLabeledObjects(allLabelsByName, _dataset.back().second, true))
        {
          QMessageBox msgBox;
@@ -348,7 +363,8 @@ void OpenDatasetsDialog::openCurrentDataset(std::string const& imagesDirectoryPa
          continue;
        }
      }
-     else {
+     else
+     {
          continue;
      }
      auto filePathQ = QString::fromStdString(_dataset.back().first);
@@ -398,6 +414,17 @@ void OpenDatasetsDialog::openDatasetItem(int row, int, int, int)
   else
   {
     cv::addWeighted(frame, 1.0, labelsImage, 0.5, 0.0, frame);
+  }
+  std::vector<cv::Mat> predictedImages = _unet.performPrediction(frame, [](std::vector<cv::Mat> const&){}, true, false);
+  for (auto const& predictedImage : predictedImages) {
+      cv::imshow("test", predictedImage);
+  }
+  cv::waitKey(1);
+  auto boundingBoxesAll = UNet::foundBoundingBoxes(predictedImages);
+  for (auto const& boundingBoxesClass : boundingBoxesAll) {
+      for(auto const& boundingBox : boundingBoxesClass) {
+          cv::rectangle(frame, boundingBox, cv::Scalar(255, 255, 255));
+      }
   }
   image = QImage((uchar*)frame.data, frame.cols, frame.rows, frame.step, QImage::Format_BGR888);
   _labelsViewLabel->setPixmap(QPixmap::fromImage(image));

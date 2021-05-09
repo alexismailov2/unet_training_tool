@@ -42,6 +42,7 @@ set(TS_FILES UnetTrainingTool_ru_RU.ts)
 
 include_directories(
     third_party/UNetDarknetTorch/include
+    third_party/OpenCVUnet/include
     ${OpenCV_INCLUDE_DIRS}
     ${Boost_INCLUDE_DIRS})
 
@@ -90,6 +91,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     ${OpenCV_LIBS}
     ${Boost_LIBS}
     ${STD_FILESYSTEM}
+    opencv_unet
     train_unet_darknet2dl)
 
 # Tanks windows for this unneeded workaround
