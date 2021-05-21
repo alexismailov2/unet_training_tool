@@ -85,14 +85,14 @@ void openFile(const QString &fileName)
 
 OpenDatasetsDialog::OpenDatasetsDialog(std::string const& projectFile, QWidget* parent)
    : QDialog(parent)
-   , _unet{"model/stage1/unet_3c1cl3l8f.cfg",
-           "model/stage1/best_197.weights",
-           cv::Size{8, 8},
-           {0.3},
-           true }
 {
    setWindowTitle(tr("Open datasets dialog"));
 
+   _unet = std::make_unique<UNet>("/home/oleksandr/WORK/09_05_2021/unet_training_tool/unet_3c1cl3l8f.cfg",
+                                  "/home/oleksandr/WORK/09_05_2021/unet_training_tool/checkpoints_3c1cl3l8f/best_28.weights",
+                                  cv::Size{8, 8},
+                                  std::vector<float>{0.99},
+                                  true);
    _projectFile = projectFile;
 
    labelsTable = new QTableWidget(0, 3);
@@ -415,19 +415,25 @@ void OpenDatasetsDialog::openDatasetItem(int row, int, int, int)
   {
     cv::addWeighted(frame, 1.0, labelsImage, 0.5, 0.0, frame);
   }
-  std::vector<cv::Mat> predictedImages = _unet.performPrediction(frame, [](std::vector<cv::Mat> const&){}, true, false);
+  std::vector<cv::Mat> predictedImages = _unet ? _unet->performPrediction(frame, [](std::vector<cv::Mat> const&){}, true, false) : std::vector<cv::Mat>{};
   for (auto const& predictedImage : predictedImages) {
       cv::imshow("test", predictedImage);
   }
   cv::waitKey(1);
+  cv::Rect unionBox;
   auto boundingBoxesAll = UNet::foundBoundingBoxes(predictedImages);
-  for (auto const& boundingBoxesClass : boundingBoxesAll) {
+  for (auto& boundingBoxesClass : boundingBoxesAll) {
+      std::sort(boundingBoxesClass.begin(), boundingBoxesClass.end(), [](auto& a, auto& b){
+          return a.area() > b.area();
+      });
       for(auto const& boundingBox : boundingBoxesClass) {
-          cv::rectangle(frame, boundingBox, cv::Scalar(255, 255, 255));
+          unionBox |= boundingBox;
+          break;
       }
   }
+  cv::rectangle(frame, unionBox, cv::Scalar(255, 255, 255), 4);
   image = QImage((uchar*)frame.data, frame.cols, frame.rows, frame.step, QImage::Format_BGR888);
-  _labelsViewLabel->setPixmap(QPixmap::fromImage(image));
+  _labelsViewLabel->setPixmap(QPixmap::fromImage(image)/*.scaled(_labelsViewLabel->width(), _labelsViewLabel->height(), Qt::KeepAspectRatio)*/);
   _labelsViewLabel->adjustSize();
 }
 

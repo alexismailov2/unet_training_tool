@@ -10,7 +10,7 @@
 #include <boost/property_tree/ptree.hpp>
 
 #include <set>
-
+#include <memory>
 
 QT_BEGIN_NAMESPACE
 class QComboBox;
@@ -58,5 +58,5 @@ private:
     boost::property_tree::ptree _pt;
 
     QPushButton* _startTrainingButton{};
-    UNet _unet;
+    std::unique_ptr<UNet> _unet;
 };

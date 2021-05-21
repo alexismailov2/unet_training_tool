@@ -12,6 +12,8 @@
 namespace fs = std::filesystem;
 #else
 #include <experimental/filesystem>
+#include <opencv_unet/UNet.hpp>
+
 namespace fs = std::experimental::filesystem;
 #endif
 
@@ -240,6 +242,11 @@ void StartTrainingDialog::trainingProcess()
   std::shuffle(wholeDatasetList.begin(), wholeDatasetList.end(), g);
   ////
 
+  UNet unet{"/home/oleksandr/WORK/09_05_2021/unet_training_tool/unet_3c1cl3l8f.cfg",
+            "/home/oleksandr/WORK/09_05_2021/unet_training_tool/checkpoints_3c1cl3l8f/best_28.weights",
+            cv::Size{8, 8},
+            std::vector<float>{0.99},
+            true};
   QProgressDialog progressDialog(this);
   progressDialog.setCancelButtonText(tr("&Cancel"));
   progressDialog.setRange(0, wholeDatasetList.size());
@@ -256,12 +263,41 @@ void StartTrainingDialog::trainingProcess()
           msgBox.exec();
           continue;
       }
+      /////////////////////
+      cv::Rect unionBox;
+      cv::Mat frame = cv::imread(datasetItem.first);
+      std::vector<cv::Mat> predictedImages = unet.performPrediction(frame, [](std::vector<cv::Mat> const&){}, true, false);
+      auto boundingBoxesAll = UNet::foundBoundingBoxes(predictedImages);
+      for (auto& boundingBoxesClass : boundingBoxesAll) {
+          std::sort(boundingBoxesClass.begin(), boundingBoxesClass.end(), [](auto& a, auto& b){
+              return a.area() > b.area();
+          });
+          for(auto const& boundingBox : boundingBoxesClass) {
+              unionBox |= boundingBox;
+              break;
+          }
+      }
+      //cv::rectangle(frame, unionBox, cv::Scalar(255, 255, 255), 4);
+      /////////////////////
       cv::resize(mask, mask, cv::Size((mask.cols) / widthDownscale, (((uint32_t)mask.rows) / heightDownscale)), 0, 0, cv::INTER_NEAREST);
+      unionBox.width /= widthDownscale;
+      unionBox.height /= heightDownscale;
       auto truncatedCols = mask.cols & (~(initialFeatureCount - 1));
       auto truncatedRows = mask.rows & (~(initialFeatureCount - 1));
-      auto const offsetX = 0; //256 + 128;
-      auto const sizeSubX = 0; //512;
-      auto roi = cv::Rect(((mask.cols - truncatedCols) / 2) + offsetX, (mask.rows - truncatedRows) / 2, truncatedCols - sizeSubX, truncatedRows);
+      auto const fractWidth = initialFeatureCount - (unionBox.width % initialFeatureCount);
+      auto const fractHeight = initialFeatureCount - (unionBox.height % initialFeatureCount);
+      unionBox.width -= initialFeatureCount - fractWidth;
+      unionBox.height += fractHeight;
+      auto const sizeSubY = 0;
+      auto const sizeSubX = 0;
+      auto const offsetX = 0;
+      auto const offsetY = 0;
+      auto roi = unionBox.empty()
+              ? cv::Rect(((mask.cols - truncatedCols) / 2) + offsetX,
+                         ((mask.rows - truncatedRows) / 2) + offsetY,
+                         truncatedCols - sizeSubX,
+                         truncatedRows - sizeSubY)
+              : unionBox;
 
       auto isTraining = currentLabel > wholeDatasetList.size() * 0.1f;
       cv::Mat maskCropped = roi.empty() ? mask : mask(roi);
